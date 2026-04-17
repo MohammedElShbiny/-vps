@@ -1,4 +1,4 @@
-name: Windows RDP (Pinggy Fixed)
+name: Windows RDP (Pinggy Log-Fix)
 on: workflow_dispatch
 
 jobs:
@@ -7,17 +7,22 @@ jobs:
     steps:
     - name: Enable RDP and Configure User
       run: |
-        # Enable RDP in Registry
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
-        # Allow RDP through Firewall
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-        # Set the password for the runneradmin account
         net user runneradmin MySecretPassword123!
-        # Prevent the runner from sleeping
-        powercfg /x -hibernate-timeout-ac 0
-        powercfg /x -hibernate-timeout-dc 0
-
-    - name: Start Pinggy Tunnel
+        
+    - name: Start Tunnel and Export URL
+      shell: cmd
       run: |
-        # -t -t forces a terminal, which helps Pinggy display the URL in GitHub logs
-        ssh -p 443 -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -t -t -R0:localhost:3389 tcp@a.pinggy.io
+        :: Start SSH in the background and save output to a file
+        start /b ssh -p 443 -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -t -t -R0:localhost:3389 tcp@a.pinggy.io > pinggy.log 2>&1
+        
+        :: Wait 15 seconds for the tunnel to initialize
+        timeout /t 15 /nobreak > nul
+        
+        :: Display the log file to see the URL
+        type pinggy.log
+        
+        :: Keep the action alive so the tunnel doesn't close
+        echo "Tunnel is running... Keep this tab open."
+        timeout /t 21600 /nobreak
