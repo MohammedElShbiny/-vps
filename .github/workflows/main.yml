@@ -1,0 +1,17 @@
+name: Windows RDP (Pinggy)
+on: workflow_dispatch
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+    - name: Enable RDP and Set Password
+      run: |
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        net user runneradmin MySecretPassword123!
+        # Change 'MySecretPassword123!' to your desired password
+        
+    - name: Start Pinggy Tunnel
+      run: |
+        ssh -p 443 -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -R0:localhost:3389 tcp@a.pinggy.io
