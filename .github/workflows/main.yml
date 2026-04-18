@@ -1,28 +1,47 @@
-name: Windows RDP (Pinggy Log-Fix)
+name: Windows RDP (Pinggy Robust)
 on: workflow_dispatch
 
 jobs:
   build:
     runs-on: windows-latest
     steps:
-    - name: Enable RDP and Configure User
+    - name: Configure RDP and User
       run: |
+        # 1. Enable RDP in Registry
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-        net user runneradmin MySecretPassword123!
         
-    - name: Start Tunnel and Export URL
-      shell: cmd
+        # 2. Set the password for the admin account
+        # YOU CAN CHANGE 'MyPassword123!' TO SOMETHING ELSE
+        net user runneradmin MyPassword123!
+        
+        Write-Host "RDP and User configured successfully."
+
+    - name: Start Tunnel and Show URL
       run: |
-        :: Start SSH in the background and save output to a file
-        start /b ssh -p 443 -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -t -t -R0:localhost:3389 tcp@a.pinggy.io > pinggy.log 2>&1
+        # 3. Start SSH in the background and save output to a file
+        $sshArgs = "-p 443 -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -t -t -R0:localhost:3389 tcp@a.pinggy.io"
+        $process = Start-Process ssh -ArgumentList $sshArgs -RedirectStandardOutput "pinggy.log" -NoNewWindow -PassThru
         
-        :: Wait 15 seconds for the tunnel to initialize
-        timeout /t 15 /nobreak > nul
+        Write-Host "Waiting for Pinggy to generate the URL..."
         
-        :: Display the log file to see the URL
-        type pinggy.log
+        # 4. Wait and check the log file for the URL
+        for ($i=0; $i -lt 12; $i++) {
+            Start-Sleep -Seconds 5
+            if (Test-Path "pinggy.log") {
+                $logs = Get-Content "pinggy.log" -Raw
+                if ($logs -match "tcp://") {
+                    Write-Host "----------------------------------------------------"
+                    Write-Host "CONNECTION URL FOUND:"
+                    $logs | Select-String -Pattern "tcp://.*" | ForEach-Object { $_.Matches.Value }
+                    Write-Host "----------------------------------------------------"
+                    break
+                }
+            }
+        }
+
+        Write-Host "The runner is now active. Keep this tab open."
+        Write-Host "If you don't see the URL above, check the 'pinggy.log' manually."
         
-        :: Keep the action alive so the tunnel doesn't close
-        echo "Tunnel is running... Keep this tab open."
-        timeout /t 21600 /nobreak
+        # 5. Keep the runner alive for 6 hours (21600 seconds)
+        Start-Sleep -Seconds 21600
